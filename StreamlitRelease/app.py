@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import plotly.express as px
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -27,8 +28,8 @@ st.set_page_config(page_title="Synthetic Credit Risk Modeling", layout="wide")
 st.title("Synthetic Credit Risk Modeling")
 
 st.markdown("""
-This app demonstrates synthetic data generation, exploratory data analysis,
-model training, and evaluation using an SVM classifier.
+This project demonstrates synthetic data generation, exploratory data analysis,
+model training, and evaluation using an SVM model.
 """)
 
 
@@ -96,11 +97,10 @@ df = st.session_state.df
 #
 
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "Data Generation",
     "Exploratory Data Analysis",
-    "Modeling",
-    "Evaluation"
+    "Modeling & Evaluation"
 ])
 
 
@@ -119,7 +119,7 @@ with tab1:
     st.markdown(
         """
         The dataset represents financial applicants grouped into three credit risk
-        categories. Each class was generated using predefined statistical parameters
+        categories. Each class was generated using custom parameters
         (mean and standard deviation) to simulate realistic financial behavior.
         """
     )
@@ -167,53 +167,68 @@ with tab2:
 
     st.subheader("Feature Visualization")
 
-    plot_type = st.radio("Select plot type", ["2D", "3D"], horizontal=True)
+    plot_type = st.radio(
+        "Select plot type",
+        ["2D Plot", "3D Plot"],
+        horizontal=True
+    )
 
     features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
 
-    x_feat = st.selectbox("X-axis feature", features, index=0)
-    y_feat = st.selectbox("Y-axis feature", features, index=1)
+    x_feat = st.selectbox("Select X-axis feature", features, index=0)
+    y_feat = st.selectbox("Select Y-axis feature", features, index=1)
 
-    if plot_type == "3D":
-        z_feat = st.selectbox("Z-axis feature", features, index=2)
-
-    if plot_type == "2D":
-        fig, ax = plt.subplots()
-        sns.scatterplot(
-            data=df,
+    if plot_type == "2D Plot":
+        fig = px.scatter(
+            df,
             x=x_feat,
             y=y_feat,
-            hue="risk_class",
-            alpha=0.6,
-            ax=ax
+            color="risk_class",
+            opacity=0.7,
+            title=f"2D Feature Visualization: {x_feat} vs {y_feat}",
+            labels={
+                x_feat: x_feat,
+                y_feat: y_feat,
+                "risk_class": "Risk Class"
+            }
         )
-        st.pyplot(fig)
+
+        fig.update_layout(
+            height=500,
+            legend_title_text="Risk Class"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
     else:
-        from mpl_toolkits.mplot3d import Axes3D
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
+        z_feat = st.selectbox("Select Z-axis feature", features, index=2)
 
-        for cls in df["risk_class"].unique():
-            subset = df[df["risk_class"] == cls]
-            ax.scatter(
-                subset[x_feat],
-                subset[y_feat],
-                subset[z_feat],
-                label=cls,
-                alpha=0.6
-            )
+        fig = px.scatter_3d(
+            df,
+            x=x_feat,
+            y=y_feat,
+            z=z_feat,
+            color="risk_class",
+            opacity=0.7,
+            title=f"3D Feature Visualization: {x_feat}, {y_feat}, {z_feat}",
+            labels={
+                x_feat: x_feat,
+                y_feat: y_feat,
+                z_feat: z_feat,
+                "risk_class": "Risk Class"
+            }
+        )
 
-        ax.set_xlabel(x_feat)
-        ax.set_ylabel(y_feat)
-        ax.set_zlabel(z_feat)
-        ax.legend()
-        st.pyplot(fig)
+        fig.update_layout(
+            height=600,
+            legend_title_text="Risk Class"
+        )
 
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # 
-#   Tab 3 – Modeling
+#   Tab 3 – Modeling & Evaluation
 # 
 
 
@@ -260,18 +275,6 @@ with tab3:
 
     st.success("SVM model trained successfully.")
 
-
-#
-#   Tab 4 – Evaluation
-#
-
-
-if df is None:
-    st.info("Click **Generate & Train Model** in the sidebar to begin.")
-    st.stop()
-
-
-with tab4:
     st.header("Model Evaluation and Analysis")
 
     if not st.session_state.model_trained:
@@ -306,7 +309,11 @@ with tab4:
     st.pyplot(fig)
 
     st.subheader("Comparison with Known Synthetic Properties")
+    st.markdown(
+        """
+        Predicted class legend: 0 = HighRisk, 1 = LowRisk, 2 = MediumRisk.
+        """
+    )
     df_eval = X_test.copy()
     df_eval["predicted"] = y_pred
     st.dataframe(df_eval.groupby("predicted").mean())
-
