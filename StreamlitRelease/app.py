@@ -10,6 +10,14 @@ from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 
+#   Streamlit session configuration
+if "df" not in st.session_state:
+    st.session_state.df = None
+
+if "model_trained" not in st.session_state:
+    st.session_state.model_trained = False
+
+
 #
 #   Main page -- Synthetic Credit Risk Modeling
 #
@@ -29,23 +37,19 @@ model training, and evaluation using an SVM classifier.
 # 
 
 
-st.sidebar.header("Dataset Configurations")
+st.sidebar.header("Dataset Configuration")
 
 samples_per_class = st.sidebar.slider(
     "Samples per risk class",
-    min_value=500,
-    max_value=5000,
-    step=500,
-    value=2000
+    500, 5000, 2000, step=500
 )
 
 test_size = st.sidebar.slider(
     "Test set size",
-    min_value=0.1,
-    max_value=0.5,
-    step=0.05,
-    value=0.3
+    0.1, 0.5, 0.3, step=0.05
 )
+
+generate_button = st.sidebar.button("Generate & Train Model")
 
 
 # 
