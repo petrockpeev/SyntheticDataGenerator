@@ -18,6 +18,8 @@ def get_random_balanced_sample(df, n_per_class=5, random_state=42):
           .reset_index(drop=True)
     )
 
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode("utf-8")
 
 #   Streamlit session configuration
 if "df" not in st.session_state:
@@ -133,7 +135,6 @@ if generate_button:
     st.session_state.model_trained = True
 
 
-
 #
 #   Main Tabs
 #
@@ -177,6 +178,14 @@ with tab1:
         st.subheader("Raw Data Sample (Randomized)")
         st.dataframe(raw_sample)
 
+        csv_data = convert_df_to_csv(df)
+        st.download_button(
+            label="Download Raw Dataset",
+            data=csv_data,
+            file_name="synthetic_credit_risk_dataset.csv",
+            mime="text/csv"
+        )
+
     with col2:
         st.subheader("Scaled Data Sample")
 
@@ -196,6 +205,25 @@ with tab1:
 
             st.dataframe(scaled_df)
 
+        if "scaler" in st.session_state:
+            scaled = st.session_state.scaler.transform(
+                df[["income","age","credit_score","debt_ratio","loan_amount"]]
+            )
+
+            scaled_df = pd.DataFrame(
+                scaled,
+                columns=["income","age","credit_score","debt_ratio","loan_amount"]
+            )
+            scaled_df["risk_class"] = df["risk_class"].values
+
+            st.download_button(
+                label="Download Scaled Dataset",
+                data=convert_df_to_csv(scaled_df),
+                file_name="scaled_credit_risk_dataset.csv",
+                mime="text/csv"
+            )
+
+
 #
 #   Exploratory Data Analysis
 #
@@ -206,12 +234,21 @@ with tab1:
 
     with col1:
         st.subheader("Income Distribution by Risk Class")
+        st.markdown("""
+            Low-risk applicants tend to have higher incomes, while high-risk
+            applicants generally have lower incomes.
+            """)
         fig, ax = plt.subplots()
         sns.histplot(df, x="income", hue="risk_class", kde=True, ax=ax)
         st.pyplot(fig)
 
     with col2:
         st.subheader("Debt Ratio by Risk Class")
+        st.markdown("""
+            Debt ratio indicates the proportion of an applicant's income that
+            goes towards debt payments. Higher debt ratios are often associated
+            with higher risk classes.
+            """)
         fig, ax = plt.subplots()
         sns.boxplot(df, x="risk_class", y="debt_ratio", ax=ax)
         st.pyplot(fig)
