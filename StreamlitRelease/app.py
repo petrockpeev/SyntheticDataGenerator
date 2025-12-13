@@ -10,6 +10,14 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
+#  helper function to get a random balanced sample from each class
+def get_random_balanced_sample(df, n_per_class=5, random_state=42):
+    return (
+        df.groupby("risk_class", group_keys=False)
+          .apply(lambda x: x.sample(n=min(n_per_class, len(x)), random_state=random_state))
+          .reset_index(drop=True)
+    )
+
 
 #   Streamlit session configuration
 if "df" not in st.session_state:
@@ -91,21 +99,54 @@ if generate_button:
 
 df = st.session_state.df
 
+if generate_button:
+    df = generate_data(samples_per_class)
+    st.session_state.df = df
+
+    features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
+    X = df[features]
+    y = df["risk_class"]
+
+    le = LabelEncoder()
+    y_enc = le.fit_transform(y)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y_enc,
+        test_size=test_size,
+        random_state=42,
+        stratify=y_enc
+    )
+
+    scaler = StandardScaler()
+    X_train_s = scaler.fit_transform(X_train)
+    X_test_s = scaler.transform(X_test)
+
+    svm = SVC(kernel="rbf")
+    svm.fit(X_train_s, y_train)
+
+    st.session_state.svm = svm
+    st.session_state.scaler = scaler
+    st.session_state.X_test = X_test
+    st.session_state.X_test_s = X_test_s
+    st.session_state.y_test = y_test
+    st.session_state.le = le
+    st.session_state.model_trained = True
+
+
 
 #
 #   Main Tabs
 #
 
 
-tab1, tab2, tab3 = st.tabs([
-    "Data Generation",
-    "Exploratory Data Analysis",
+tab1, tab2 = st.tabs([
+    "Data Generation & Exploratory Data Analysis",
     "Modeling & Evaluation"
 ])
 
 
 # 
-#   Tab 1 – Data Generation
+#   Tab 1 – Data Generation & Exploratory Data Analysis
 #
 
 
@@ -121,24 +162,44 @@ with tab1:
         The dataset represents financial applicants grouped into three credit risk
         categories. Each class was generated using custom parameters
         (mean and standard deviation) to simulate realistic financial behavior.
+        Features were standardized using **StandardScaler**
+            (mean = 0, standard deviation = 1).
         """
     )
 
     st.write("**Dataset shape:**", df.shape)
-    st.dataframe(df.head(30))
 
+    raw_sample = get_random_balanced_sample(df, n_per_class=5)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Raw Data Sample (Randomized)")
+        st.dataframe(raw_sample)
+
+    with col2:
+        st.subheader("Scaled Data Sample")
+
+        if "scaler" not in st.session_state:
+            st.warning("Train the model to view scaled data.")
+        else:
+            scaled_values = st.session_state.scaler.transform(
+                raw_sample[["income", "age", "credit_score", "debt_ratio", "loan_amount"]]
+            )
+
+            scaled_df = pd.DataFrame(
+                scaled_values,
+                columns=["income", "age", "credit_score", "debt_ratio", "loan_amount"]
+            )
+
+            scaled_df["risk_class"] = raw_sample["risk_class"].values
+
+            st.dataframe(scaled_df)
 
 #
-#   Tab 2 – Exploratory Data Analysis
+#   Exploratory Data Analysis
 #
 
-
-if df is None:
-    st.info("Click **Generate & Train Model** in the sidebar to begin.")
-    st.stop()
-
-
-with tab2:
     st.header("Exploratory Data Analysis (EDA)")
 
     col1, col2 = st.columns(2)
@@ -156,6 +217,7 @@ with tab2:
         st.pyplot(fig)
 
     st.subheader("Feature Correlation Matrix")
+    st.markdown("""The correlation matrix shows the relationships between different features.""")
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(
         df.drop(columns="risk_class").corr(),
@@ -228,7 +290,7 @@ with tab2:
 
 
 # 
-#   Tab 3 – Modeling & Evaluation
+#   Tab 2 – Modeling & Evaluation
 # 
 
 
@@ -237,43 +299,17 @@ if df is None:
     st.stop()
 
 
-with tab3:
+with tab2:
     st.header("SVM Model Training")
 
-    if not generate_button and not st.session_state.model_trained:
+    if not st.session_state.model_trained:
         st.info("Generate the dataset first.")
         st.stop()
 
-    features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
-    X = df[features]
-    y = df["risk_class"]
-
-    le = LabelEncoder()
-    y_enc = le.fit_transform(y)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_enc,
-        test_size=test_size,
-        random_state=42,
-        stratify=y_enc
-    )
-
-    scaler = StandardScaler()
-    X_train_s = scaler.fit_transform(X_train)
-    X_test_s = scaler.transform(X_test)
-
-    svm = SVC(kernel="rbf")
-    svm.fit(X_train_s, y_train)
-
-    st.session_state.svm = svm
-    st.session_state.scaler = scaler
-    st.session_state.X_test_s = X_test_s
-    st.session_state.y_test = y_test
-    st.session_state.le = le
-    st.session_state.X_test = X_test
-    st.session_state.model_trained = True
-
     st.success("SVM model trained successfully.")
+    st.write("Train/Test Split: ", f"{int((1-test_size)*100)}% / {int(test_size*100)}%")
+
+
 
     st.header("Model Evaluation and Analysis")
 
@@ -293,9 +329,12 @@ with tab3:
     st.metric("Accuracy", f"{acc:.3f}")
 
     st.subheader("Classification Report")
-    st.text(classification_report(y_test, y_pred, target_names=le.classes_))
+    report_dict = classification_report(y_test, y_pred, target_names=le.classes_, output_dict=True)
+    report_df = pd.DataFrame(report_dict).transpose()
+    st.dataframe(report_df)
 
     st.subheader("Confusion Matrix")
+    st.markdown("Confusion matrices show the model's prediction performance across different classes.")
     fig, ax = plt.subplots()
     sns.heatmap(
         confusion_matrix(y_test, y_pred),
@@ -309,11 +348,38 @@ with tab3:
     st.pyplot(fig)
 
     st.subheader("Comparison with Known Synthetic Properties")
-    st.markdown(
-        """
-        Predicted class legend: 0 = HighRisk, 1 = LowRisk, 2 = MediumRisk.
-        """
-    )
+    st.markdown(" The closer the values of the predicted class means are to the \
+                true class means, indicates that the model is performing better.")
+
     df_eval = X_test.copy()
-    df_eval["predicted"] = y_pred
-    st.dataframe(df_eval.groupby("predicted").mean())
+    df_eval["true_class"] = le.inverse_transform(y_test)
+    df_eval["predicted_class"] = le.inverse_transform(y_pred)
+
+    true_means = (
+    df_eval
+    .groupby("true_class")[["income","age","credit_score","debt_ratio","loan_amount"]]
+    .mean()
+    )
+
+    pred_means = (
+        df_eval
+        .groupby("predicted_class")[["income","age","credit_score","debt_ratio","loan_amount"]]
+        .mean()
+    )
+
+    st.subheader("True Class Mean Features")
+    st.dataframe(true_means)
+
+    st.subheader("Predicted Class Mean Features")
+    st.dataframe(pred_means)
+
+    comparison = (pred_means - true_means) / true_means
+    st.subheader("Relative Error (Predicted vs True Means)")
+    st.markdown("""
+        **Interpretation:**
+
+        - < 10% = best performance
+        - 10–25% = acceptable
+        - \> 25% = model confusion
+        """)
+    st.dataframe(comparison.style.format("{:.2%}"))
