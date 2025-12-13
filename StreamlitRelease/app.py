@@ -16,12 +16,36 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 
 
 st.set_page_config(page_title="Synthetic Credit Risk Modeling", layout="wide")
-st.title("Synthetic Credit Risk Modeling (Option 1)")
+st.title("Synthetic Credit Risk Modeling")
 
 st.markdown("""
 This app demonstrates synthetic data generation, exploratory data analysis,
 model training, and evaluation using an SVM classifier.
 """)
+
+
+# 
+#   Sidebar menu
+# 
+
+
+st.sidebar.header("Dataset Configurations")
+
+samples_per_class = st.sidebar.slider(
+    "Samples per risk class",
+    min_value=500,
+    max_value=5000,
+    step=500,
+    value=2000
+)
+
+test_size = st.sidebar.slider(
+    "Test set size",
+    min_value=0.1,
+    max_value=0.5,
+    step=0.05,
+    value=0.3
+)
 
 
 # 
@@ -59,59 +83,79 @@ def generate_data(n_per_class=2000):
 df = generate_data()
 
 
-# 
-#   Sidebar menu
-# 
-
-
-st.sidebar.header("Controls")
-show_data = st.sidebar.checkbox("Show raw data")
-show_eda = st.sidebar.checkbox("Show EDA", True)
-train_model = st.sidebar.checkbox("Train SVM model", True)
-
-if show_data:
-    st.subheader("Raw Synthetic Dataset")
-    st.dataframe(df.head(50))
-
-
-# 
-#   EDA Section
+#
+#   Main Tabs
 #
 
 
-if show_eda:
-    st.subheader("Exploratory Data Analysis")
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Data Generation",
+    "Exploratory Data Analysis",
+    "Modeling",
+    "Evaluation"
+])
+
+
+# 
+#   Tab 1 – Data Generation
+#
+
+
+with tab1:
+    st.header("Synthetic Dataset Overview")
+    st.markdown(
+        """
+        The dataset represents financial applicants grouped into three credit risk
+        categories. Each class was generated using predefined statistical parameters
+        (mean and standard deviation) to simulate realistic financial behavior.
+        """
+    )
+
+    st.write("**Dataset shape:**", df.shape)
+    st.dataframe(df.head(30))
+
+
+#
+#   Tab 2 – Exploratory Data Analysis
+#
+
+
+with tab2:
+    st.header("Exploratory Data Analysis (EDA)")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### Income Distribution")
+        st.subheader("Income Distribution by Risk Class")
         fig, ax = plt.subplots()
         sns.histplot(df, x="income", hue="risk_class", kde=True, ax=ax)
         st.pyplot(fig)
 
     with col2:
-        st.markdown("### Debt Ratio by Risk Class")
+        st.subheader("Debt Ratio by Risk Class")
         fig, ax = plt.subplots()
         sns.boxplot(df, x="risk_class", y="debt_ratio", ax=ax)
         st.pyplot(fig)
 
-    st.markdown("### Feature Correlation Matrix")
-    fig, ax = plt.subplots(figsize=(8,6))
-    sns.heatmap(df.drop(columns="risk_class").corr(),
-                annot=True, cmap="coolwarm", ax=ax)
+    st.subheader("Feature Correlation Matrix")
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(
+        df.drop(columns="risk_class").corr(),
+        annot=True,
+        cmap="coolwarm",
+        ax=ax
+    )
     st.pyplot(fig)
 
 
 # 
-#   Model Training & Evaluation
+#   Tab 3 – Modeling
 # 
 
+with tab3:
+    st.header("SVM Model Training")
 
-if train_model:
-    st.subheader("SVM Model Training & Evaluation")
-
-    features = ["income","age","credit_score","debt_ratio","loan_amount"]
+    features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
     X = df[features]
     y = df["risk_class"]
 
@@ -119,7 +163,10 @@ if train_model:
     y_enc = le.fit_transform(y)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y_enc, test_size=0.3, random_state=42, stratify=y_enc
+        X, y_enc,
+        test_size=test_size,
+        random_state=42,
+        stratify=y_enc
     )
 
     scaler = StandardScaler()
@@ -128,24 +175,44 @@ if train_model:
 
     svm = SVC(kernel="rbf")
     svm.fit(X_train_s, y_train)
-    y_pred = svm.predict(X_test_s)
 
+    st.success("SVM model trained successfully.")
+
+
+#
+#   Tab 4 – Evaluation
+#
+
+
+with tab4:
+    st.header("Model Evaluation and Analysis")
+
+    y_pred = svm.predict(X_test_s)
     acc = accuracy_score(y_test, y_pred)
 
-    st.markdown(f"### Accuracy: **{acc:.3f}**")
+    st.metric("Accuracy", f"{acc:.3f}")
 
-    st.markdown("### Classification Report")
+    st.subheader("Classification Report")
     st.text(classification_report(y_test, y_pred, target_names=le.classes_))
 
-    st.markdown("### Confusion Matrix")
+    st.subheader("Confusion Matrix")
     fig, ax = plt.subplots()
-    sns.heatmap(confusion_matrix(y_test, y_pred),
-                annot=True, fmt="d", cmap="Blues",
-                xticklabels=le.classes_,
-                yticklabels=le.classes_)
+    sns.heatmap(
+        confusion_matrix(y_test, y_pred),
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=le.classes_,
+        yticklabels=le.classes_,
+        ax=ax
+    )
     st.pyplot(fig)
 
-    st.markdown("### Mean Feature Values per Predicted Class")
+    st.subheader("Comparison with Known Synthetic Properties")
+    st.markdown("""
+    Table legend: 0 = HighRisk, 1 = LowRisk, 2 = MediumRisk
+    """)
+
     df_eval = X_test.copy()
     df_eval["predicted"] = y_pred
     st.dataframe(df_eval.groupby("predicted").mean())
