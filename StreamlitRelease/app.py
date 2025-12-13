@@ -84,7 +84,11 @@ def generate_data(n_per_class=2000):
     ])
     return df
 
-df = generate_data()
+if generate_button:
+    st.session_state.df = generate_data(samples_per_class)
+    st.session_state.model_trained = False
+
+df = st.session_state.df
 
 
 #
@@ -105,6 +109,11 @@ tab1, tab2, tab3, tab4 = st.tabs([
 #
 
 
+if df is None:
+    st.info("Click **Generate & Train Model** in the sidebar to begin.")
+    st.stop()
+
+
 with tab1:
     st.header("Synthetic Dataset Overview")
     st.markdown(
@@ -122,6 +131,11 @@ with tab1:
 #
 #   Tab 2 – Exploratory Data Analysis
 #
+
+
+if df is None:
+    st.info("Click **Generate & Train Model** in the sidebar to begin.")
+    st.stop()
 
 
 with tab2:
@@ -151,13 +165,69 @@ with tab2:
     )
     st.pyplot(fig)
 
+    st.subheader("Feature Visualization")
+
+    plot_type = st.radio("Select plot type", ["2D", "3D"], horizontal=True)
+
+    features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
+
+    x_feat = st.selectbox("X-axis feature", features, index=0)
+    y_feat = st.selectbox("Y-axis feature", features, index=1)
+
+    if plot_type == "3D":
+        z_feat = st.selectbox("Z-axis feature", features, index=2)
+
+    if plot_type == "2D":
+        fig, ax = plt.subplots()
+        sns.scatterplot(
+            data=df,
+            x=x_feat,
+            y=y_feat,
+            hue="risk_class",
+            alpha=0.6,
+            ax=ax
+        )
+        st.pyplot(fig)
+
+    else:
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d")
+
+        for cls in df["risk_class"].unique():
+            subset = df[df["risk_class"] == cls]
+            ax.scatter(
+                subset[x_feat],
+                subset[y_feat],
+                subset[z_feat],
+                label=cls,
+                alpha=0.6
+            )
+
+        ax.set_xlabel(x_feat)
+        ax.set_ylabel(y_feat)
+        ax.set_zlabel(z_feat)
+        ax.legend()
+        st.pyplot(fig)
+
+
 
 # 
 #   Tab 3 – Modeling
 # 
 
+
+if df is None:
+    st.info("Click **Generate & Train Model** in the sidebar to begin.")
+    st.stop()
+
+
 with tab3:
     st.header("SVM Model Training")
+
+    if not generate_button and not st.session_state.model_trained:
+        st.info("Generate the dataset first.")
+        st.stop()
 
     features = ["income", "age", "credit_score", "debt_ratio", "loan_amount"]
     X = df[features]
@@ -180,6 +250,14 @@ with tab3:
     svm = SVC(kernel="rbf")
     svm.fit(X_train_s, y_train)
 
+    st.session_state.svm = svm
+    st.session_state.scaler = scaler
+    st.session_state.X_test_s = X_test_s
+    st.session_state.y_test = y_test
+    st.session_state.le = le
+    st.session_state.X_test = X_test
+    st.session_state.model_trained = True
+
     st.success("SVM model trained successfully.")
 
 
@@ -188,8 +266,23 @@ with tab3:
 #
 
 
+if df is None:
+    st.info("Click **Generate & Train Model** in the sidebar to begin.")
+    st.stop()
+
+
 with tab4:
     st.header("Model Evaluation and Analysis")
+
+    if not st.session_state.model_trained:
+        st.info("Train the model to view evaluation results.")
+        st.stop()
+
+    svm = st.session_state.svm
+    X_test_s = st.session_state.X_test_s
+    y_test = st.session_state.y_test
+    le = st.session_state.le
+    X_test = st.session_state.X_test
 
     y_pred = svm.predict(X_test_s)
     acc = accuracy_score(y_test, y_pred)
@@ -213,10 +306,7 @@ with tab4:
     st.pyplot(fig)
 
     st.subheader("Comparison with Known Synthetic Properties")
-    st.markdown("""
-    Table legend: 0 = HighRisk, 1 = LowRisk, 2 = MediumRisk
-    """)
-
     df_eval = X_test.copy()
     df_eval["predicted"] = y_pred
     st.dataframe(df_eval.groupby("predicted").mean())
+
